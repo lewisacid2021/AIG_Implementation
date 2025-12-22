@@ -5,6 +5,7 @@
 #include <cassert>
 #include <iostream>
 #include <stdexcept>
+#include <unordered_map>
 
 // -------------------------
 // 节点表示
@@ -58,6 +59,8 @@ public:
     void rewrite_phase1();
     void rewrite_phase2();
     void rewrite();
+    bool hasAnd(uint32_t lit0, uint32_t lit1) const;
+    std::vector<int> build_refs() const;
 
     // 统计信息
     void print_stats() const;  // 输出格式: pis=2, pos=2, area=4, depth=2, not=4
@@ -66,6 +69,7 @@ private:
     uint32_t depthRec(uint32_t id, std::vector<int>& memo) const;
     uint32_t countAnds() const;
     uint32_t countInverters() const;
+    std::unordered_map<uint64_t, uint32_t> computed_table;
 };
     
 // -------------------------
