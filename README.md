@@ -19,5 +19,5 @@ If all goes well, the resulting binary executable `read_aig` will be placed in t
 Ensure you are in the root directory and execute the test script using 
 
 ```bash
-    python3 test.py.
+    python3 test.py
 ```
