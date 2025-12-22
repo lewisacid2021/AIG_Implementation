@@ -135,7 +135,6 @@ void AigGraph::optimize() {
     }
 
     // 3. 定义递归函数：获取旧 Literal 对应的新 Literal
-    // 注意：必须使用 std::function 以支持 lambda 递归
     std::function<uint32_t(uint32_t)> get_new_lit = 
         [&](uint32_t old_lit) -> uint32_t {
         
@@ -149,7 +148,7 @@ void AigGraph::optimize() {
 
         // 如果没处理过，递归处理其子节点
         const AigNode& n = nodes[old_id];
-        // 注意：Input 和 Constant 0 前面已经处理过了，理论上不会进到这里
+        // Input 和 Constant 0 前面已经处理过了，理论上不会进到这里
         // 但为了安全起见或者处理游离节点：
         if (n.is_input || old_id == 0) {
              // 这种情况通常意味着逻辑错误，因为前面已经预先填充了 inputs
@@ -159,7 +158,7 @@ void AigGraph::optimize() {
         uint32_t l0 = get_new_lit(n.fanin0);
         uint32_t l1 = get_new_lit(n.fanin1);
 
-        // --- 常量传播与代数简化 (逻辑同你之前) ---
+        // 常量传播与代数简化
         uint32_t res;
         if (l0 == 0 || l1 == 0) { res = 0; }
         else if (l0 == 1) { res = l1; }
@@ -167,7 +166,7 @@ void AigGraph::optimize() {
         else if (l0 == l1) { res = l0; }
         else if (l0 == (l1 ^ 1)) { res = 0; }
         else {
-            // --- Strashing ---
+            // Strashing
             if (l0 > l1) std::swap(l0, l1);
             uint64_t key = (static_cast<uint64_t>(l0) << 32) | l1;
             auto it = strash.find(key);
@@ -201,7 +200,7 @@ void AigGraph::optimize() {
     inputs = new_input_ids; // inputs 已经是 ID 了
     outputs = new_outputs;
     
-    // 【重要】清空 addAnd 用的哈希表，因为 ID 已经全变了
+    // 清空 addAnd 用的哈希表，因为 ID 已经全变了
     computed_table.clear(); 
     // 将 strash 同步回去 下一轮 rewrite 调用 addAnd 时，能立即查到现有的节点
     for (auto const& [key, lit] : strash) {
