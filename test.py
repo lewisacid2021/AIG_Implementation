@@ -5,7 +5,7 @@ import sys
 
 # ================= 配置区域 =================
 # 可执行文件路径 (相对于脚本所在目录)
-# 根据你的目录结构：build/bin/read_aig
+# build/bin/read_aig
 BINARY_PATH = os.path.join("build", "bin", "read_aig")
 # 测试用例根目录
 TEST_DIR = "test"
