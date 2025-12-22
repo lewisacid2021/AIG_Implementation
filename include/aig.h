@@ -54,6 +54,11 @@ public:
     // 全局优化（去重 + 常量传播）
     void optimize();
 
+    // 重写
+    void rewrite_phase1();
+    void rewrite_phase2();
+    void rewrite();
+
     // 统计信息
     void print_stats() const;  // 输出格式: pis=2, pos=2, area=4, depth=2, not=4
 

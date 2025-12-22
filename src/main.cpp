@@ -11,7 +11,7 @@ int main(int argc, char** argv){
     aig.print_stats();
 
     std::cout << "\noptimize\n\n";
-    aig.optimize();
+    aig.rewrite();
 
     // 优化后
     aig.print_stats();

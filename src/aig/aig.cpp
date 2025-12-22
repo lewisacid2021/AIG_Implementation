@@ -256,3 +256,165 @@ void AigGraph::print_stats() const {
               << ", not=" << countInverters()
               << std::endl;
 }
+
+// =============================================================
+// Rewrite部分
+// =============================================================
+
+
+bool rewriteRedundant(uint32_t id, AigGraph& g, uint32_t& new_lit)
+{
+    const auto& n = g.nodes[id];
+    if (n.is_input) return false;
+
+    uint32_t x = n.fanin0;
+    uint32_t y = n.fanin1;
+
+    uint32_t xid = lit_id(x);
+    uint32_t yid = lit_id(y);
+
+    if (!g.nodes[xid].is_input) {
+        auto& nx = g.nodes[xid];
+        if (nx.fanin0 == y || nx.fanin1 == y) {
+            new_lit = x;
+            return true;
+        }
+    }
+
+    if (!g.nodes[yid].is_input) {
+        auto& ny = g.nodes[yid];
+        if (ny.fanin0 == x || ny.fanin1 == x) {
+            new_lit = y;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool rewriteCommonFactor_P1(uint32_t id, AigGraph& g, uint32_t& new_lit)
+{
+    const auto& n = g.nodes[id];
+    if (n.is_input) return false;
+
+    uint32_t x = n.fanin0, y = n.fanin1;
+    const auto& nx = g.nodes[lit_id(x)];
+    const auto& ny = g.nodes[lit_id(y)];
+    if (nx.is_input || ny.is_input) return false;
+
+    uint32_t xa = nx.fanin0, xb = nx.fanin1;
+    uint32_t ya = ny.fanin0, yb = ny.fanin1;
+
+    auto pull = [&](uint32_t c, uint32_t a, uint32_t b) {
+        uint32_t t = g.addAnd(a, b);   // ✅ 允许新建
+        new_lit = g.addAnd(c, t);
+        return true;
+    };
+
+    if (xa == ya) return pull(xa, xb, yb);
+    if (xa == yb) return pull(xa, xb, ya);
+    if (xb == ya) return pull(xb, xa, yb);
+    if (xb == yb) return pull(xb, xa, ya);
+
+    return false;
+}
+
+
+
+bool rewriteChain_P1(uint32_t id, AigGraph& g, uint32_t& new_lit)
+{
+    const auto& n = g.nodes[id];
+    if (n.is_input) return false;
+
+    uint32_t x = n.fanin0;
+    uint32_t y = n.fanin1;
+
+    // 尝试：(x & y) & z  ->  x & (y & z)
+    // 我们只匹配 fanin0 是 AND 的情况
+    const auto& nx = g.nodes[lit_id(x)];
+    if (nx.is_input) return false;
+
+    uint32_t a = nx.fanin0;
+    uint32_t b = nx.fanin1;
+    uint32_t c = y;
+
+    // 避免 trivial/self-loop
+    if (a == c || b == c) return false;
+
+    // 构造 (b & c)
+    uint32_t t = g.addAnd(b, c);
+
+    // 构造 a & (b & c)
+    new_lit = g.addAnd(a, t);
+    return true;
+}
+
+
+bool rewriteNegAbsorb(uint32_t id, AigGraph& g,uint32_t& new_lit)
+{
+    const auto& n = g.nodes[id];
+    if (n.is_input) return false;
+
+    if (n.fanin0 == (n.fanin1 ^ 1) ||
+        n.fanin1 == (n.fanin0 ^ 1)) {
+        new_lit = 0;
+        return true;
+    }
+    return false;
+}
+
+void AigGraph::rewrite_phase1()
+{
+    const uint32_t N = nodes.size();
+    for (uint32_t id = 1; id < N; ++id) {
+        if (nodes[id].is_input) continue;
+
+        uint32_t new_lit;
+        if (rewriteCommonFactor_P1(id, *this, new_lit) ||
+            rewriteChain_P1(id, *this, new_lit))
+        {
+            nodes[id].fanin0 = new_lit;
+            nodes[id].fanin1 = 1; // AND(x,1)=x
+        }
+    }
+}
+
+void AigGraph::rewrite_phase2()
+{
+    const uint32_t N = nodes.size();
+    std::vector<uint32_t> replace(N, UINT32_MAX);
+
+    for (uint32_t id = 1; id < N; ++id) {
+        if (nodes[id].is_input) continue;
+
+        uint32_t new_lit;
+        if (rewriteNegAbsorb(id, *this, new_lit) ||
+            rewriteRedundant(id, *this, new_lit) ||
+            (nodes[id].fanin0 == nodes[id].fanin1 &&
+             (new_lit = nodes[id].fanin0, true)))
+        {
+            replace[id] = new_lit;
+        }
+    }
+
+    for (uint32_t id = 1; id < N; ++id) {
+        auto& n = nodes[id];
+        if (n.is_input) continue;
+
+        if (replace[lit_id(n.fanin0)] != UINT32_MAX)
+            n.fanin0 = replace[lit_id(n.fanin0)] ^ lit_inv(n.fanin0);
+
+        if (replace[lit_id(n.fanin1)] != UINT32_MAX)
+            n.fanin1 = replace[lit_id(n.fanin1)] ^ lit_inv(n.fanin1);
+    }
+
+    optimize();
+}
+
+void AigGraph::rewrite()
+{
+    for (int i = 0; i < 3; ++i) {
+        rewrite_phase1();   // 制造结构
+        optimize();         // strash 折叠
+        rewrite_phase2();   // 真正减少 AND
+    }
+}
